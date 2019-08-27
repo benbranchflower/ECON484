@@ -6,6 +6,7 @@ Ben Branchflower
 """
 
 import re
+from collections import Counter
 
 import pandas as pd
 from nltk.corpus import stopwords
@@ -25,20 +26,35 @@ import pydotplus
 SEED = 123
 TEST_SIZE = .3
 
-def text_to_features(tweet_text):
+def text_to_features(tweet_text, terms):
     '''
     This function takes the raw text from a tweet and prepares it to be
     classified by generating the numeric features used in training
-    arguments: tweet_text (str) - the text from a tweet
-    returns: array of numeric features
+    arguments:
+        tweet_text (str) - the text from a tweet
+        terms (list like) - the words/ngrams used in the bag of words features
+    returns:
+        array of numeric features
     '''
     tknzr = TweetTokenizer()
-    
+    tokens = tknzr.tokenize(tweet_text)
+    n_tokens = len(tokens)
+    avg_tok_len = sum([len(x) for x in tokens]) / n_tokens
+    tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 2)]
+    tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 3)]
+    counts = Counter(tokens)
+    feats = {x:counts.get(x,0) for x in terms}
+    feats['total_words'] = n_tokens
+    feats['n_cap_let'] = len(re.findall('[A-Z]',tweet_text))
+    feats['avg_word_len'] = avg_tok_len
+    return pd.Series(feats)
+
 
 if __name__ == '__main__':
     # reading in the data
     obama = pd.read_csv('obama_tweets.csv')
-    trump = pd.read_csv('trump_tweets.txt', sep='|', error_bad_lines=False, warn_bad_lines=False).reset_index()
+    trump = pd.read_csv('trump_tweets.txt', sep='|', error_bad_lines=False,
+                            warn_bad_lines=False).reset_index()
 
     print('read in the data...')
 
@@ -66,7 +82,7 @@ if __name__ == '__main__':
     both['n_cap_let'] = [len(re.findall('[A-Z]',x)) for x in both.text]
     both.text = both.text.str.lower()
 
-    # parsing text and droping empty tweets after cleaning
+    # parsing text and dropping empty tweets after cleaning
     both['tokens'] = [[re.sub('_', '', y) for y in TweetTokenizer().tokenize(x)] for x in both.text]
     both = both.loc[[len(x) > 0 for x in both.tokens],:]
 
