@@ -10,10 +10,13 @@ import re
 from collections import Counter
 
 import pandas as pd
+import pickle
 from nltk.corpus import stopwords
 from nltk import ngrams
 from nltk.tokenize import TweetTokenizer
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 
 from sklearn.ensemble import RandomForestClassifier
@@ -49,6 +52,21 @@ def text_to_features(tweet_text, terms):
     feats['n_cap_let'] = len(re.findall('[A-Z]',tweet_text))
     feats['avg_word_len'] = avg_tok_len
     return pd.Series(feats)
+
+
+def model_tuning(model, params, outfile=None):
+    '''
+    this file runs a gridsearch for the given parameters
+    it is just a couple lines but I will be using it enough it seems worth it
+    '''
+    gridsearch = GridSearchCV(model, params)
+    gridsearch.fit()
+    print('Best Parameters', gridsearch.best_params_)
+    print('Train time', gridsearch.refit_time_)
+    print(classification_report(y_test, gridsearch.best_model_.predict(x_test)))
+    if outfile is not None:
+        pickle.dump(gridsearch, outfile)
+    return gridsearch.best_model_
 
 
 if __name__ == '__main__':
@@ -93,8 +111,8 @@ if __name__ == '__main__':
     # parsing out words
     ''' this part filters out stopwords like 'and', 'the' and such stopwords needs to be downloaded from nltk to use it
     both['no_stop_tokens'] = [x for x in both.tokens if x not in stopwords.words('english')]
-    both['n_stop_word'] = [x - len(y) for x, y in zip(both.total_xxwords, both.no_stop_tokens)]
-    ''' # Count vectorizer removes stopwords so this is unnecessary unless we wnat stop word counts
+    both['n_stop_word'] = [x - len(y) for x, y in zip(both.total_words, both.no_stop_tokens)]
+    ''' # Count vectorizer removes stopwords so this is unnecessary unless we want stop word counts
 
     # making n_grams
     both['bigrams'] = [(re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(x, 2)) for x in both.tokens]
@@ -104,6 +122,7 @@ if __name__ == '__main__':
 
     # bag of words features
     ngram_tokens = [f"{' '.join(x)} {' '.join(y)} {' '.join(z)}" for x,y,z in zip(both.tokens, both.bigrams, both.trigrams)]
+    ngram_tokens = [re.sub('(?:\s|^)_|_(?:\s|$)','',x) for x in ngram_tokens]
     vectorizer = CountVectorizer(max_df=.8, min_df=15, max_features=5000)
     bow_mat = vectorizer.fit_transform(ngram_tokens)
     print('Bag of words feature set:', bow_mat.shape)
@@ -128,3 +147,5 @@ if __name__ == '__main__':
     dot_data = tree.export_graphviz(dtree, feature_names=x_train.columns)
     graph = pydotplus.graph_from_dot_data(dot_data)
     graph.write_png('3_level_decision_tree.png')
+
+    dtree = model_tuning(dtree, {'max_depth':[100]})
