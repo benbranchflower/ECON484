@@ -5,6 +5,7 @@ Ben Branchflower
 20 Aug 2019
 """
 
+import json
 import re
 from collections import Counter
 
@@ -53,8 +54,7 @@ def text_to_features(tweet_text, terms):
 if __name__ == '__main__':
     # reading in the data
     obama = pd.read_csv('obama_tweets.csv')
-    trump = pd.read_csv('trump_tweets.txt', sep='|', error_bad_lines=False,
-                            warn_bad_lines=False).reset_index()
+    trump = pd.DataFrame(json.load(open('trump_tweets.json')))
 
     print('read in the data...')
 
@@ -64,7 +64,6 @@ if __name__ == '__main__':
 
     # renaming names consistent for concat
     obama.rename(columns={'Text':'text'}, inplace=True)
-    trump.rename(columns={'index':'text'}, inplace=True)
 
     # concatenating data
     both = pd.concat((obama.loc[:,['text','obama_indicator']], trump.loc[:,['text','obama_indicator']]))
