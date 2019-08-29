@@ -30,7 +30,7 @@ import pydotplus
 SEED = 123
 TEST_SIZE = .2 # the proportion of data left out of sample
 MAX_FEATURES = 7500 # the maximum number of bag of words features
-N_JOBS = 6 # the number of threads to be used during training, -1 all processors
+N_JOBS = 6 # the number of threads to be used during training, -1 uses all processors available
 
 
 def text_to_features(tweet_text):
@@ -150,28 +150,28 @@ if __name__ == '__main__':
     x_train, x_test, y_train, y_test = train_test_split(feats.loc[:,[x for x in feats.columns if x != 'obama_indicator']],
                                                         feats.obama_indicator, random_state=SEED)
     '''
-    print('\nDecision Tree')
-    # decision tree
-    dtree = DecisionTreeClassifier(max_depth=3, max_features=x_train.shape[1],
-                                    class_weight='balanced',
-                                    min_samples_split=50, random_state=SEED)
-    dtree.fit(x_train, y_train)
+print('\nDecision Tree')
+# decision tree
+dtree = DecisionTreeClassifier(max_depth=3, max_features=x_train.shape[1],
+                                class_weight='balanced',
+                                min_samples_split=50, random_state=SEED)
+dtree.fit(x_train, y_train)
 
-    # visualize decision tree
-    dot_data = tree.export_graphviz(dtree, feature_names=x_train.columns)
-    graph = pydotplus.graph_from_dot_data(dot_data)
-    graph.write_png('3_level_decision_tree.png')
+# visualize decision tree
+dot_data = tree.export_graphviz(dtree, feature_names=x_train.columns)
+graph = pydotplus.graph_from_dot_data(dot_data)
+graph.write_png('3_level_decision_tree.png')
 
-    dtree = model_tuning(dtree, {'max_depth':[100]}, 'best_dtree.joblib')
+dtree = model_tuning(dtree, {'max_depth':[100]}, 'best_dtree.joblib')
     '''
     '''
     # random forest
     print('\nRandom Forest')
-    rfc = RandomForestClassifier(n_estimators=100, max_depth=100,
-                                    class_weight='balanced',
-                                    random_state=SEED)
+rfc = RandomForestClassifier(n_estimators=500, max_depth=150,
+                                class_weight='balanced',
+                                random_state=SEED, n_jobs=N_JOBS)
 
-    rfc = model_tuning(rfc, {'max_depth':[100]}, 'best_rf.joblib')
+rfc = model_tuning(rfc, {'max_depth':[100,150]}, 'best_rf.joblib')
     '''
     '''
     # Support Vector Machine
