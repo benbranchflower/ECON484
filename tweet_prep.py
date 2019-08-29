@@ -43,7 +43,8 @@ def text_to_features(tweet_text):
     returns:
         array of numeric features
     '''
-    tweet_text = re.sub(f'[{punctuation}]|[“”]','',tweet_text)
+    tweet_text = re.sub(f'[{punctuation}]|[’“”—]','',tweet_text)
+    tweet_text = re.sub('–|––|—|\s+',' ',tweet_text)
     tknzr = TweetTokenizer()
     tokens = tknzr.tokenize(tweet_text)
     ngram_tokens = tokens.copy()
@@ -104,7 +105,8 @@ if __name__ == '__main__':
 
     print('data cleaned...')
 
-    both.text = both.text.str.replace(f'[{punctuation}]','')
+    both.text = both.text.str.replace(f'[{punctuation}]|[’“”—]','')
+    both.text = both.text.str.replace('–|—|––|\s+',' ')
     both['n_cap_let'] = [len(re.findall('[A-Z]',x)) for x in both.text]
     both.text = both.text.str.lower()
 
@@ -132,13 +134,14 @@ if __name__ == '__main__':
     # bag of words features
     ngram_tokens = [f"{' '.join(x)} {' '.join(y)} {' '.join(z)}" for x,y,z in zip(both.tokens, both.bigrams, both.trigrams)]
     ngram_tokens = [re.sub('(?:\s|^)_|_(?:\s|$)','',x) for x in ngram_tokens]
-    vectorizer = CountVectorizer(max_df=.9, min_df=15, max_features=MAX_FEATURES)
+    vectorizer = CountVectorizer(max_df=.9, min_df=5, max_features=MAX_FEATURES)
     bow_mat = vectorizer.fit_transform(ngram_tokens)
     print('Bag of words feature set:', bow_mat.shape)
 
     # write the data
     feats = both.merge(pd.DataFrame(bow_mat.A, columns=vectorizer.get_feature_names()), left_index=True, right_index=True)
     feats = feats.loc[:,[x for x in feats.columns if x not in ('text','tokens','bigrams','trigrams')]]
+    feats = feats.loc[:,[x for x in feats.columns if feats[x].sum() > 0]]
 
     print('Completed Feature construction')
     # feats.to_csv('tweet_feats.txt',sep='|')
