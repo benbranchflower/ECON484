@@ -9,8 +9,8 @@ import json
 import re
 from collections import Counter
 
+import joblib
 import pandas as pd
-import pickle
 from nltk.corpus import stopwords
 from nltk import ngrams
 from nltk.tokenize import TweetTokenizer
@@ -28,9 +28,12 @@ import pydotplus
 
 # constants
 SEED = 123
-TEST_SIZE = .3
+TEST_SIZE = .2 # the proportion of data left out of sample
+MAX_FEATURES = 7500 # the maximum number of bag of words features
+N_JOBS = 6 # the number of threads to be used during training, -1 all processors
 
-def text_to_features(tweet_text, terms):
+
+def text_to_features(tweet_text):
     '''
     This function takes the raw text from a tweet and prepares it to be
     classified by generating the numeric features used in training
@@ -46,12 +49,13 @@ def text_to_features(tweet_text, terms):
     avg_tok_len = sum([len(x) for x in tokens]) / n_tokens
     tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 2)]
     tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 3)]
-    counts = Counter(tokens)
-    feats = {x:counts.get(x,0) for x in terms}
-    feats['total_words'] = n_tokens
-    feats['n_cap_let'] = len(re.findall('[A-Z]',tweet_text))
-    feats['avg_word_len'] = avg_tok_len
-    return pd.Series(feats)
+    token_text = re.sub('(?:^|\s)_|_(?:\s|$)','',' '.join(tokens))
+    bow_vec = vectorizer.transform([token_text])
+    feats = pd.DataFrame(bow_vec.A, columns=vectorizer.get_feature_names())
+    feats['total_words'] = [n_tokens]
+    feats['n_cap_let'] = [len(re.findall('[A-Z]',tweet_text))]
+    feats['avg_word_len'] = [avg_tok_len]
+    return feats
 
 
 def model_tuning(model, params, outfile=None):
@@ -59,14 +63,14 @@ def model_tuning(model, params, outfile=None):
     this file runs a gridsearch for the given parameters
     it is just a couple lines but I will be using it enough it seems worth it
     '''
-    gridsearch = GridSearchCV(model, params)
-    gridsearch.fit()
+    gridsearch = GridSearchCV(model, params, cv=5)
+    gridsearch.fit(x_train, y_train)
     print('Best Parameters', gridsearch.best_params_)
     print('Train time', gridsearch.refit_time_)
-    print(classification_report(y_test, gridsearch.best_model_.predict(x_test)))
+    print(classification_report(y_test, gridsearch.best_estimator_.predict(x_test)))
     if outfile is not None:
-        pickle.dump(gridsearch, outfile)
-    return gridsearch.best_model_
+        joblib.dump(gridsearch, outfile)
+    return gridsearch.best_estimator_
 
 
 if __name__ == '__main__':
@@ -88,6 +92,7 @@ if __name__ == '__main__':
 
     #dropping retweets
     both = both.loc[~both.text.str.contains('^RT'),:]
+    print('Shape of raw data:', both.shape)
 
     # cleaning text
     both.text = both.text.str.strip().str.replace('\s+',' ').str.replace('(?:: )?https?://.+(?:\s|$)','')
@@ -123,7 +128,7 @@ if __name__ == '__main__':
     # bag of words features
     ngram_tokens = [f"{' '.join(x)} {' '.join(y)} {' '.join(z)}" for x,y,z in zip(both.tokens, both.bigrams, both.trigrams)]
     ngram_tokens = [re.sub('(?:\s|^)_|_(?:\s|$)','',x) for x in ngram_tokens]
-    vectorizer = CountVectorizer(max_df=.8, min_df=15, max_features=5000)
+    vectorizer = CountVectorizer(max_df=.9, min_df=15, max_features=MAX_FEATURES)
     bow_mat = vectorizer.fit_transform(ngram_tokens)
     print('Bag of words feature set:', bow_mat.shape)
 
@@ -138,9 +143,11 @@ if __name__ == '__main__':
     x_train, x_test, y_train, y_test = train_test_split(feats.loc[:,[x for x in feats.columns if x != 'obama_indicator']],
                                                         feats.obama_indicator, random_state=SEED)
 
-    # modelling
-    dtree = DecisionTreeClassifier(max_depth=3, max_features=5003, class_weight='balanced',
-                                    random_state=SEED)
+    print('\nDecision Tree')
+    # decision tree
+    dtree = DecisionTreeClassifier(max_depth=3, max_features=x_train.shape[1],
+                                    class_weight='balanced',
+                                    min_samples_split=50, random_state=SEED)
     dtree.fit(x_train, y_train)
 
     # visualize decision tree
@@ -148,4 +155,20 @@ if __name__ == '__main__':
     graph = pydotplus.graph_from_dot_data(dot_data)
     graph.write_png('3_level_decision_tree.png')
 
-    dtree = model_tuning(dtree, {'max_depth':[100]})
+    dtree = model_tuning(dtree, {'max_depth':[100]}, 'best_dtree.joblib')
+    '''
+    # random forest
+    print('\nRandom Forest')
+    rfc = RandomForestClassifier(n_estimators=100, max_depth=100,
+                                    class_weight='balanced',
+                                    random_state=SEED)
+
+    rfc = model_tuning(rfc, {'max_depth':[100]}, 'best_rf.joblib')
+
+    # Support Vector Machine
+    print('\nSupport Vector Machine')
+    svm = SVC()
+
+    svm = model_tuning(svm, {}, 'best_svm.joblib')
+    # Neural Network
+    '''
