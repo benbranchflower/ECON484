@@ -7,7 +7,7 @@ Ben Branchflower
 
 import json
 import re
-from collections import Counter
+from string import punctuation
 
 import joblib
 import pandas as pd
@@ -43,13 +43,16 @@ def text_to_features(tweet_text):
     returns:
         array of numeric features
     '''
+    tweet_text = re.sub(f'[{punctuation}]|[“”]','',tweet_text)
     tknzr = TweetTokenizer()
     tokens = tknzr.tokenize(tweet_text)
+    ngram_tokens = tokens.copy()
     n_tokens = len(tokens)
     avg_tok_len = sum([len(x) for x in tokens]) / n_tokens
-    tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 2)]
-    tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 3)]
-    token_text = re.sub('(?:^|\s)_|_(?:\s|$)','',' '.join(tokens))
+    ngram_tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 2)]
+    ngram_tokens += [re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(tokens, 3)]
+    token_text = re.sub('\b_|_\b','',' '.join(ngram_tokens)).lower()
+    print(token_text)
     bow_vec = vectorizer.transform([token_text])
     feats = pd.DataFrame(bow_vec.A, columns=vectorizer.get_feature_names())
     feats['total_words'] = [n_tokens]
@@ -101,6 +104,7 @@ if __name__ == '__main__':
 
     print('data cleaned...')
 
+    both.text = both.text.str.replace(f'[{punctuation}]','')
     both['n_cap_let'] = [len(re.findall('[A-Z]',x)) for x in both.text]
     both.text = both.text.str.lower()
 
@@ -120,8 +124,8 @@ if __name__ == '__main__':
     ''' # Count vectorizer removes stopwords so this is unnecessary unless we want stop word counts
 
     # making n_grams
-    both['bigrams'] = [(re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(x, 2)) for x in both.tokens]
-    both['trigrams'] = [(re.sub('^_|\s_|_\s','','_'.join(y)) for y in ngrams(x, 3)) for x in both.tokens]
+    both['bigrams'] = [(re.sub('^_|\s_|_\s|_$','','_'.join(y)) for y in ngrams(x, 2)) for x in both.tokens]
+    both['trigrams'] = [(re.sub('^_|\s_|_\s|_$','','_'.join(y)) for y in ngrams(x, 3)) for x in both.tokens]
 
     print('preliminary features complete...')
 
@@ -142,7 +146,7 @@ if __name__ == '__main__':
     # split data into train and test
     x_train, x_test, y_train, y_test = train_test_split(feats.loc[:,[x for x in feats.columns if x != 'obama_indicator']],
                                                         feats.obama_indicator, random_state=SEED)
-
+    '''
     print('\nDecision Tree')
     # decision tree
     dtree = DecisionTreeClassifier(max_depth=3, max_features=x_train.shape[1],
@@ -157,6 +161,7 @@ if __name__ == '__main__':
 
     dtree = model_tuning(dtree, {'max_depth':[100]}, 'best_dtree.joblib')
     '''
+    '''
     # random forest
     print('\nRandom Forest')
     rfc = RandomForestClassifier(n_estimators=100, max_depth=100,
@@ -164,7 +169,8 @@ if __name__ == '__main__':
                                     random_state=SEED)
 
     rfc = model_tuning(rfc, {'max_depth':[100]}, 'best_rf.joblib')
-
+    '''
+    '''
     # Support Vector Machine
     print('\nSupport Vector Machine')
     svm = SVC()
